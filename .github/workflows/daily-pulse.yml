@@ -1,0 +1,43 @@
+name: Daily Market Pulse
+
+on:
+  schedule:
+    # 17:00 UTC = 10:00 AM PDT (Pacific Daylight Time, summer).
+    # During PST (winter, UTC-8) this fires at 9:00 AM Pacific instead —
+    # GitHub Actions cron doesn't shift for DST.
+    - cron: "0 17 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  run-pulse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Market Pulse
+        env:
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+        run: python market_pulse.py
+
+      - name: Commit output back to repo
+        run: |
+          git config user.name "market-pulse-bot"
+          git config user.email "actions@github.com"
+          git add output/
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "Daily pulse: $(date -u +%Y-%m-%d)"
+          git push
