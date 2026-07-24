@@ -470,11 +470,13 @@ def append_to_sheets(stocks: pd.DataFrame, summary: pd.DataFrame, insights: dict
     gc = gspread.service_account(filename=creds_path)
     sh = gc.open_by_key(sheet_id)
 
-    def get_or_create(tab, headers):
+    def get_or_create(tab, headers, extra_cols=0):
         try:
             return sh.worksheet(tab), False
         except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=tab, rows=1000, cols=len(headers))
+            # extra_cols leaves room for a chart anchored to the right of the data —
+            # the Sheets API rejects an anchor cell outside the sheet's grid bounds.
+            ws = sh.add_worksheet(title=tab, rows=1000, cols=len(headers) + extra_cols)
             ws.append_row(headers)
             return ws, True
 
@@ -497,7 +499,7 @@ def append_to_sheets(stocks: pd.DataFrame, summary: pd.DataFrame, insights: dict
         seg_vol = dict(zip(summary["segment"], summary["avg_vol"]))
 
         try:
-            ws, created = get_or_create(config.SHEET_TAB_PRICE_TREND, ["date"] + segments)
+            ws, created = get_or_create(config.SHEET_TAB_PRICE_TREND, ["date"] + segments, extra_cols=10)
             ws.append_row([TODAY] + [seg_1d.get(s, "") if s in present else "" for s in segments],
                           value_input_option="USER_ENTERED")
             print(f"[sheets] appended 1 row to '{config.SHEET_TAB_PRICE_TREND}'")
@@ -508,7 +510,7 @@ def append_to_sheets(stocks: pd.DataFrame, summary: pd.DataFrame, insights: dict
             print(f"[sheets] price trend tab/chart failed: {e}")
 
         try:
-            ws, created = get_or_create(config.SHEET_TAB_VOLUME_TREND, ["date"] + segments)
+            ws, created = get_or_create(config.SHEET_TAB_VOLUME_TREND, ["date"] + segments, extra_cols=10)
             ws.append_row([TODAY] + [seg_vol.get(s, "") if s in present else "" for s in segments],
                           value_input_option="USER_ENTERED")
             print(f"[sheets] appended 1 row to '{config.SHEET_TAB_VOLUME_TREND}'")
