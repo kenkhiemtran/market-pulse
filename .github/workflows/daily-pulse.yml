@@ -26,6 +26,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Write Google service account key
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > service_account.json
+
       - name: Run Market Pulse
         env:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
@@ -33,6 +38,10 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
         run: python market_pulse.py
+
+      - name: Remove service account key
+        if: always()
+        run: rm -f service_account.json
 
       - name: Commit output back to repo
         run: |
