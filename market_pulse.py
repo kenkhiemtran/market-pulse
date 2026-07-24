@@ -103,6 +103,7 @@ def build_segment_summary(stocks: pd.DataFrame) -> pd.DataFrame:
             avg_1d=("chg_1d_pct", "mean"),
             avg_5d=("chg_5d_pct", "mean"),
             avg_20d=("chg_20d_pct", "mean"),
+            avg_vol=("volume_vs_20d_avg", "mean"),
             n_tickers=("ticker", "count"),
         )
         .round(2)
@@ -149,32 +150,134 @@ def fetch_news() -> list[dict]:
         except Exception as e:
             print(f"[news] failed for {source}: {e}")
 
-    # De-duplicate near-identical headlines (common with Google News feeds)
+    # De-duplicate near-identical headlines (common with Google News feeds).
+    # Count how many sources ran essentially the same headline — that
+    # corroboration count doubles as a "how big is this story" signal.
+    key_counts = Counter(re.sub(r"\W+", "", a["title"].lower())[:60] for a in articles)
     seen, unique = set(), []
     for a in articles:
         key = re.sub(r"\W+", "", a["title"].lower())[:60]
         if key and key not in seen:
             seen.add(key)
+            a["source_count"] = key_counts[key]
             unique.append(a)
     print(f"[news] {len(unique)} unique articles after de-dup")
     return unique
 
 
-def keyword_trends(articles: list[dict]) -> list[tuple[str, int]]:
-    """Count tracked keywords across headlines — what is the market talking about?"""
-    counter = Counter()
+def keyword_counts_full(articles: list[dict]) -> Counter:
+    """Count every tracked keyword across headlines (including zero-hit keywords)."""
+    counter = Counter({kw: 0 for kw in config.TREND_KEYWORDS})
     for a in articles:
         title_lower = a["title"].lower()
         for kw in config.TREND_KEYWORDS:
             if kw.lower() in title_lower:
                 counter[kw] += 1
-    return counter.most_common(12)
+    return counter
+
+
+def keyword_trends(articles: list[dict]) -> list[tuple[str, int]]:
+    """Top tracked keywords across headlines — what is the market talking about?"""
+    return [(k, c) for k, c in keyword_counts_full(articles).most_common(12) if c > 0]
+
+
+def pick_top_story(articles: list[dict]) -> dict | None:
+    """Pick the day's biggest industry story: cross-source corroboration matters
+    more than any single source, tracked-keyword relevance breaks ties."""
+    if not articles:
+        return None
+
+    def score(a: dict) -> int:
+        title_lower = a["title"].lower()
+        kw_hits = sum(1 for kw in config.TREND_KEYWORDS if kw.lower() in title_lower)
+        return a.get("source_count", 1) * 3 + kw_hits
+
+    return max(articles, key=score)
 
 
 # ===========================================================================
 # 3. INSIGHTS
 # ===========================================================================
-def build_insights(stocks: pd.DataFrame, articles: list[dict]) -> dict:
+def build_implications(summary: pd.DataFrame, keyword_counts: Counter) -> list[str]:
+    """Rule-based read on what today's segment moves + headline mix imply for
+    the broader tech industry. Deterministic and threshold-driven — not AI-written,
+    so treat it as a research prompt, not a verdict."""
+    if summary.empty:
+        return []
+
+    moves = dict(zip(summary["segment"], summary["avg_1d"]))
+    vols = dict(zip(summary["segment"], summary["avg_vol"]))
+    bullets = []
+
+    eq = moves.get("Semiconductor Equipment (upstream)")
+    if eq is not None and abs(eq) >= config.BIG_MOVE_PCT:
+        direction = "surged" if eq > 0 else "dropped"
+        bullets.append(
+            f"Semiconductor equipment makers {direction} {eq:+.1f}% today — this segment "
+            "(ASML, Applied Materials, Lam Research, KLA, Tokyo Electron) sits furthest "
+            "upstream, so moves here often foreshadow foundry capacity and capex "
+            "decisions 2-3 quarters out."
+        )
+
+    found, design = moves.get("Foundry & Manufacturing"), moves.get("Chip Designers (fabless)")
+    if found is not None and design is not None:
+        if found > 0 and design > 0 and min(found, design) >= 1.0:
+            bullets.append(
+                f"Foundry (+{found:.1f}%) and fabless chip designers (+{design:.1f}%) moved up "
+                "together — a sign manufacturing capacity and design-side demand are reading "
+                "the same signal right now."
+            )
+        elif (found > 0) != (design > 0) and max(abs(found), abs(design)) >= config.BIG_MOVE_PCT:
+            bullets.append(
+                f"Foundry ({found:+.1f}%) and chip designers ({design:+.1f}%) diverged — a split "
+                "between who's manufacturing chips and who's ordering them, worth watching for "
+                "an inventory correction in the next few weeks."
+            )
+
+    mem = moves.get("Memory & Storage")
+    ai_mentions = sum(keyword_counts.get(k, 0) for k in ("AI", "artificial intelligence", "HBM", "data center", "datacenter"))
+    if mem is not None and mem >= config.BIG_MOVE_PCT and ai_mentions >= 3:
+        bullets.append(
+            f"Memory & storage stocks jumped {mem:+.1f}% alongside heavy AI/data-center/HBM "
+            f"coverage ({ai_mentions} mentions today) — consistent with the ongoing "
+            "high-bandwidth-memory demand story for AI accelerators."
+        )
+
+    cloud = moves.get("Cloud & Hyperscalers (demand side)")
+    if cloud is not None and eq is not None and cloud < 0 and eq < 0 and min(cloud, eq) <= -config.BIG_MOVE_PCT:
+        bullets.append(
+            f"Both hyperscalers/demand side ({cloud:+.1f}%) and equipment makers/supply side "
+            f"({eq:+.1f}%) fell today — weakness at both ends of the chain at once more often "
+            "reflects broad capex caution than an isolated, one-company event."
+        )
+
+    geo_count = sum(keyword_counts.get(k, 0) for k in ("tariff", "export control", "China", "Taiwan", "subsidy", "CHIPS Act"))
+    if geo_count >= 3:
+        bullets.append(
+            f"Trade-policy terms (tariffs, export controls, China, Taiwan, CHIPS Act) appeared "
+            f"{geo_count} times in today's headlines — foundry (TSMC, Samsung, SK Hynix) and "
+            "equipment segments carry the most direct exposure to policy shifts like these."
+        )
+
+    if vols:
+        top_vol_seg = max(vols, key=lambda s: (vols[s] if pd.notna(vols[s]) else 0))
+        top_vol = vols[top_vol_seg]
+        if pd.notna(top_vol) and top_vol >= config.VOLUME_SPIKE_RATIO:
+            bullets.append(
+                f"{top_vol_seg} saw the heaviest trading activity today ({top_vol:.1f}x normal "
+                "volume) — elevated volume without a matching price move often precedes a "
+                "bigger move in the sessions that follow."
+            )
+
+    if not bullets:
+        bullets.append(
+            "No segment showed the outsized, cross-chain moves needed to flag a clear "
+            "supply-chain implication today — overall a quiet day across the stack."
+        )
+    return bullets[:4]
+
+
+def build_insights(stocks: pd.DataFrame, summary: pd.DataFrame, articles: list[dict]) -> dict:
     ins = {"movers_up": [], "movers_down": [], "volume_spikes": [], "keywords": []}
     if not stocks.empty:
         big = stocks[stocks["chg_1d_pct"].abs() >= config.BIG_MOVE_PCT]
@@ -182,7 +285,10 @@ def build_insights(stocks: pd.DataFrame, articles: list[dict]) -> dict:
         ins["movers_down"] = big[big["chg_1d_pct"] < 0].sort_values("chg_1d_pct").to_dict("records")
         spikes = stocks[stocks["volume_vs_20d_avg"] >= config.VOLUME_SPIKE_RATIO]
         ins["volume_spikes"] = spikes.sort_values("volume_vs_20d_avg", ascending=False).to_dict("records")
-    ins["keywords"] = keyword_trends(articles)
+    kw_counts = keyword_counts_full(articles)
+    ins["keywords"] = [(k, c) for k, c in kw_counts.most_common(12) if c > 0]
+    ins["top_story"] = pick_top_story(articles)
+    ins["implications"] = build_implications(summary, kw_counts)
     return ins
 
 
@@ -200,6 +306,24 @@ def render_email_html(stocks, summary, articles, insights) -> str:
     <html><body style="font-family:Segoe UI,Arial,sans-serif;color:#222;max-width:760px;margin:auto">
     <h2 style="border-bottom:3px solid #2c5f8a;padding-bottom:6px">Tech Supply Chain Pulse — {TODAY}</h2>
     """]
+
+    # Biggest story of the day
+    ts = insights.get("top_story")
+    if ts:
+        h.append(f"""
+        <div style="background:#fff6e0;border-left:4px solid #e0a100;padding:12px 16px;margin:14px 0">
+          <div style="font-size:12px;color:#8a6d00;text-transform:uppercase;letter-spacing:.5px">🔥 Biggest Industry Story Today</div>
+          <div style="font-size:16px;font-weight:600;margin-top:4px"><a href="{ts['link']}" style="color:#222;text-decoration:none">{ts['title']}</a></div>
+          <div style="font-size:12px;color:#888;margin-top:2px">{ts['source']} · covered by {ts.get('source_count', 1)} source(s) today</div>
+        </div>
+        """)
+
+    # Supply chain implications
+    if insights.get("implications"):
+        h.append('<h3 style="color:#2c5f8a">🔗 What This Means for the Industry</h3><ul style="font-size:14px;line-height:1.6">')
+        for bullet in insights["implications"]:
+            h.append(f"<li>{bullet}</li>")
+        h.append("</ul>")
 
     # Segment summary
     if not summary.empty:
@@ -272,7 +396,66 @@ def send_email(html: str) -> None:
 # ===========================================================================
 # 5. GOOGLE SHEETS
 # ===========================================================================
-def append_to_sheets(stocks: pd.DataFrame, summary: pd.DataFrame) -> None:
+def ensure_chart(sh, worksheet, title: str, series_count: int, y_title: str) -> None:
+    """Create a LINE chart on `worksheet` the first time it's created. The source
+    ranges omit an end row, so the chart keeps growing as new rows are appended."""
+    sheet_id = worksheet.id
+    domain = {
+        "domain": {
+            "sourceRange": {
+                "sources": [{"sheetId": sheet_id, "startRowIndex": 0, "startColumnIndex": 0, "endColumnIndex": 1}]
+            }
+        }
+    }
+    series = [
+        {
+            "series": {
+                "sourceRange": {
+                    "sources": [{
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "startColumnIndex": i + 1,
+                        "endColumnIndex": i + 2,
+                    }]
+                }
+            },
+            "targetAxis": "LEFT_AXIS",
+        }
+        for i in range(series_count)
+    ]
+    request = {
+        "requests": [{
+            "addChart": {
+                "chart": {
+                    "spec": {
+                        "title": title,
+                        "basicChart": {
+                            "chartType": "LINE",
+                            "legendPosition": "RIGHT_LEGEND",
+                            "headerCount": 1,
+                            "axis": [
+                                {"position": "BOTTOM_AXIS", "title": "Date"},
+                                {"position": "LEFT_AXIS", "title": y_title},
+                            ],
+                            "domains": [domain],
+                            "series": series,
+                        },
+                    },
+                    "position": {
+                        "overlayPosition": {
+                            "anchorCell": {"sheetId": sheet_id, "rowIndex": 0, "columnIndex": series_count + 2},
+                            "widthPixels": 900,
+                            "heightPixels": 420,
+                        }
+                    },
+                }
+            }
+        }]
+    }
+    sh.batch_update(request)
+
+
+def append_to_sheets(stocks: pd.DataFrame, summary: pd.DataFrame, insights: dict) -> None:
     sheet_id = os.getenv("GOOGLE_SHEET_ID")
     creds_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "service_account.json")
 
@@ -289,21 +472,63 @@ def append_to_sheets(stocks: pd.DataFrame, summary: pd.DataFrame) -> None:
 
     def get_or_create(tab, headers):
         try:
-            ws = sh.worksheet(tab)
+            return sh.worksheet(tab), False
         except gspread.WorksheetNotFound:
             ws = sh.add_worksheet(title=tab, rows=1000, cols=len(headers))
             ws.append_row(headers)
-        return ws
+            return ws, True
 
     if not stocks.empty:
-        ws = get_or_create(config.SHEET_TAB_DAILY, list(stocks.columns))
+        ws, _ = get_or_create(config.SHEET_TAB_DAILY, list(stocks.columns))
         ws.append_rows(stocks.fillna("").values.tolist(), value_input_option="USER_ENTERED")
         print(f"[sheets] appended {len(stocks)} rows to '{config.SHEET_TAB_DAILY}'")
 
     if not summary.empty:
-        ws = get_or_create(config.SHEET_TAB_SUMMARY, list(summary.columns))
+        ws, _ = get_or_create(config.SHEET_TAB_SUMMARY, list(summary.columns))
         ws.append_rows(summary.fillna("").values.tolist(), value_input_option="USER_ENTERED")
         print(f"[sheets] appended {len(summary)} rows to '{config.SHEET_TAB_SUMMARY}'")
+
+    # Wide-format trend tabs (one column per segment) so native Sheets charts
+    # can plot every segment as its own series over time.
+    if not summary.empty:
+        segments = list(config.SUPPLY_CHAIN.keys())
+        present = set(summary["segment"])
+        seg_1d = dict(zip(summary["segment"], summary["avg_1d"]))
+        seg_vol = dict(zip(summary["segment"], summary["avg_vol"]))
+
+        try:
+            ws, created = get_or_create(config.SHEET_TAB_PRICE_TREND, ["date"] + segments)
+            ws.append_row([TODAY] + [seg_1d.get(s, "") if s in present else "" for s in segments],
+                          value_input_option="USER_ENTERED")
+            print(f"[sheets] appended 1 row to '{config.SHEET_TAB_PRICE_TREND}'")
+            if created:
+                ensure_chart(sh, ws, "Segment Price Change Trend (avg 1-day %)", len(segments), "% change")
+                print(f"[sheets] created chart on '{config.SHEET_TAB_PRICE_TREND}'")
+        except Exception as e:
+            print(f"[sheets] price trend tab/chart failed: {e}")
+
+        try:
+            ws, created = get_or_create(config.SHEET_TAB_VOLUME_TREND, ["date"] + segments)
+            ws.append_row([TODAY] + [seg_vol.get(s, "") if s in present else "" for s in segments],
+                          value_input_option="USER_ENTERED")
+            print(f"[sheets] appended 1 row to '{config.SHEET_TAB_VOLUME_TREND}'")
+            if created:
+                ensure_chart(sh, ws, "Segment Trading Volume Trend (popularity, vs 20d avg)", len(segments), "x normal volume")
+                print(f"[sheets] created chart on '{config.SHEET_TAB_VOLUME_TREND}'")
+        except Exception as e:
+            print(f"[sheets] volume trend tab/chart failed: {e}")
+
+    top_story = insights.get("top_story")
+    if top_story:
+        try:
+            ws, _ = get_or_create(config.SHEET_TAB_TOP_STORY, ["date", "title", "source", "link", "source_count"])
+            ws.append_row(
+                [TODAY, top_story["title"], top_story["source"], top_story["link"], top_story.get("source_count", 1)],
+                value_input_option="USER_ENTERED",
+            )
+            print(f"[sheets] appended 1 row to '{config.SHEET_TAB_TOP_STORY}'")
+        except Exception as e:
+            print(f"[sheets] top story tab failed: {e}")
 
 
 # ===========================================================================
@@ -319,7 +544,7 @@ def main():
     stocks = fetch_stock_data()
     summary = build_segment_summary(stocks)
     articles = fetch_news()
-    insights = build_insights(stocks, articles)
+    insights = build_insights(stocks, summary, articles)
     html = render_email_html(stocks, summary, articles, insights)
 
     # Always keep a local copy so no run is ever lost
@@ -336,7 +561,7 @@ def main():
         return
 
     errors = []
-    for step, fn in (("sheets", lambda: append_to_sheets(stocks, summary)),
+    for step, fn in (("sheets", lambda: append_to_sheets(stocks, summary, insights)),
                      ("email", lambda: send_email(html))):
         try:
             fn()

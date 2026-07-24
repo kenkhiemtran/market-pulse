@@ -122,8 +122,11 @@ BIG_MOVE_PCT = 3.0         # flag single-day moves bigger than this
 # ---------------------------------------------------------------------------
 # GOOGLE SHEETS
 # ---------------------------------------------------------------------------
-SHEET_TAB_DAILY = "daily_log"          # one row per ticker per day
-SHEET_TAB_SUMMARY = "segment_summary"  # one row per segment per day
+SHEET_TAB_DAILY = "daily_log"                    # one row per ticker per day
+SHEET_TAB_SUMMARY = "segment_summary"            # one row per segment per day
+SHEET_TAB_PRICE_TREND = "segment_price_trend"    # wide: one row per day, one column per segment (avg 1-day % move) — charted
+SHEET_TAB_VOLUME_TREND = "segment_volume_trend"  # wide: one row per day, one column per segment (avg volume vs 20d avg) — charted
+SHEET_TAB_TOP_STORY = "daily_top_story"          # one row per day: the day's biggest industry story
 
 # ---------------------------------------------------------------------------
 # EMAIL
