@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: daily-market-pulse
+  cancel-in-progress: false
+
 jobs:
   run-pulse:
     runs-on: ubuntu-latest
@@ -22,6 +26,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: pip install -r requirements.txt
