@@ -32,6 +32,16 @@ copy .env.example .env       # Windows  (cp on Mac/Linux)
 
 The script auto-creates two tabs: `daily_log` (one row per ticker per day) and `segment_summary`.
 
+### Google Drive (predictive_model.py report uploads)
+Reuses the exact same service account as the Sheet above — its Cloud project already
+has the Drive API enabled from step 2, so there's nothing new to create there.
+- Optional: set `GOOGLE_DRIVE_FOLDER_ID` in `.env` to a folder you've shared with the
+  service account's `client_email` (Editor access, same as the Sheet) to file uploads
+  under it.
+- Whether or not you set a folder, every upload is also shared directly with
+  `EMAIL_SENDER` so it shows up in your own Drive — not just the service account's own
+  hidden space.
+
 ### Test it
 ```bash
 python market_pulse.py --dry-run   # fetches everything, prints summary, no email/sheet
@@ -63,6 +73,51 @@ crontab -e
 0 10 * * * cd /path/to/market_pulse && ./venv/bin/python market_pulse.py >> output/run_log.txt 2>&1
 ```
 (On a Mac laptop, `launchd` handles missed runs better than cron — happy to set that up if needed.)
+
+---
+
+## 2b. Monthly supply-chain forecast report
+
+`predictive_model.py` fits a momentum model on `output/stocks_*.csv` and writes
+`output/predictions_<date>.csv` + `output/monthly_forecast_<month>.md`.
+`render_report.py` builds on that: it re-runs the same forecast, renders the
+designed HTML/PDF report (`report_assets/template.html`, fonts cached locally
+under `report_assets/fonts/` — no network dependency), and saves the whole
+package (HTML, PDF, CSV, MD) into a local folder, default
+`~/Downloads/Forecast Report/<YYYY-MM>/`:
+
+```bash
+python render_report.py                       # saves to ~/Downloads/Forecast Report/<month>
+python render_report.py --dest "D:\Reports"    # or a custom folder
+```
+
+PDF export shells out to a local Edge or Chrome install (`--headless=new
+--print-to-pdf`). If neither is found, the HTML report is still written — just
+open it in a browser.
+
+### Windows — Task Scheduler (already set up)
+A monthly task named **MarketPulseMonthlyForecast** runs `run_monthly_report.bat`
+on the 1st of each month at 9:00 AM (start-when-available is on, same as the
+daily task). To inspect, change, or remove it:
+```powershell
+Get-ScheduledTask -TaskName "MarketPulseMonthlyForecast"
+Unregister-ScheduledTask -TaskName "MarketPulseMonthlyForecast" -Confirm:$false
+```
+Recreate it (note: `schtasks /TR` breaks on the space in this folder's name —
+use the 8.3 short path, from `(New-Object -ComObject Scripting.FileSystemObject).GetFile("<path>").ShortPath`):
+```powershell
+schtasks /create /TN "MarketPulseMonthlyForecast" /TR "<short-path-to-run_monthly_report.bat>" /SC MONTHLY /D 1 /ST 09:00 /RL LIMITED /F
+```
+
+### Google Drive upload — currently disabled
+`predictive_model.py` also has an `upload_to_drive()` step (same service account
+as the Sheet). It's off by default here (`upload=False`) because **Google
+blocks a service account from writing file content to a personal
+(non-Workspace) Google Drive** — confirmed via a live 403 "Service Accounts do
+not have storage quota," even into a folder shared with it (Shared Drives and
+OAuth delegation, Google's suggested fixes, are both Workspace-only features).
+It works if you're on Google Workspace (`GOOGLE_DRIVE_FOLDER_ID` env var, see
+`.env.example`) — otherwise this is a real platform limitation, not a bug.
 
 ---
 
