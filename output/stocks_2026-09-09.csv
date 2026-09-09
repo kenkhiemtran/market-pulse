@@ -1,0 +1,51 @@
+date,ticker,segment,close,chg_1d_pct,chg_5d_pct,chg_20d_pct,volume_vs_20d_avg
+2026-09-09,SNPS,EDA & Chip IP,393.36,0.34,-5.17,-4.27,0.47
+2026-09-09,CDNS,EDA & Chip IP,284.31,0.07,-9.18,-13.2,0.57
+2026-09-09,ARM,EDA & Chip IP,263.63,0.8,12.27,-1.97,0.71
+2026-09-09,ASML,Semiconductor Equipment (upstream),1723.63,-2.34,3.51,-4.21,0.72
+2026-09-09,AMAT,Semiconductor Equipment (upstream),467.89,-1.04,5.89,-10.89,0.32
+2026-09-09,LRCX,Semiconductor Equipment (upstream),315.05,-1.68,8.56,1.17,0.4
+2026-09-09,KLAC,Semiconductor Equipment (upstream),182.51,-3.42,6.8,-8.86,0.62
+2026-09-09,8035.T,Semiconductor Equipment (upstream),53700.0,-0.56,1.11,-7.78,1.27
+2026-09-09,6857.T,Semiconductor Equipment (upstream),32840.0,-2.84,0.92,-4.95,1.24
+2026-09-09,TSM,Foundry & Manufacturing,433.86,-1.17,4.8,2.8,0.55
+2026-09-09,2330.TW,Foundry & Manufacturing,2465.0,-0.2,3.35,2.07,0.9
+2026-09-09,UMC,Foundry & Manufacturing,22.49,3.05,9.84,18.72,0.56
+2026-09-09,GFS,Foundry & Manufacturing,45.81,1.61,4.29,-9.85,0.58
+2026-09-09,INTC,Foundry & Manufacturing,106.35,1.8,19.53,8.84,0.84
+2026-09-09,MU,Memory & Storage,1029.81,2.95,10.32,18.57,0.72
+2026-09-09,005930.KS,Memory & Storage,269500.0,0.0,7.58,12.53,0.76
+2026-09-09,000660.KS,Memory & Storage,1856000.0,3.51,15.07,30.27,0.92
+2026-09-09,WDC,Memory & Storage,483.51,1.3,7.38,10.44,0.5
+2026-09-09,STX,Memory & Storage,898.41,-0.66,10.01,9.49,0.72
+2026-09-09,NVDA,Chip Designers (fabless),223.88,-0.82,2.96,2.94,0.46
+2026-09-09,AMD,Chip Designers (fabless),519.67,2.75,13.07,9.56,1.06
+2026-09-09,QCOM,Chip Designers (fabless),175.34,0.72,5.81,8.37,0.9
+2026-09-09,AVGO,Chip Designers (fabless),363.84,-1.28,-1.58,-12.56,0.64
+2026-09-09,MRVL,Chip Designers (fabless),234.85,4.19,11.62,10.61,0.69
+2026-09-09,2454.TW,Chip Designers (fabless),4625.0,-1.8,8.19,15.19,0.59
+2026-09-09,ANET,Networking & Data Center Hardware,192.47,-1.28,1.7,-2.72,0.39
+2026-09-09,CSCO,Networking & Data Center Hardware,109.3,0.12,-0.4,-9.24,0.34
+2026-09-09,SMCI,Networking & Data Center Hardware,38.92,-3.34,6.01,23.15,0.46
+2026-09-09,DELL,Networking & Data Center Hardware,533.7,-0.03,25.58,21.03,0.77
+2026-09-09,HPE,Networking & Data Center Hardware,57.62,2.83,13.26,5.95,0.79
+2026-09-09,VRT,Networking & Data Center Hardware,261.59,-10.05,2.2,-7.18,1.87
+2026-09-09,MSFT,Cloud & Hyperscalers (demand side),491.54,-0.49,-1.89,-2.25,0.35
+2026-09-09,GOOGL,Cloud & Hyperscalers (demand side),331.0,-2.18,-1.14,-3.66,1.02
+2026-09-09,AMZN,Cloud & Hyperscalers (demand side),252.11,-1.89,-1.1,-7.4,0.71
+2026-09-09,META,Cloud & Hyperscalers (demand side),654.91,6.75,13.2,9.31,1.78
+2026-09-09,ORCL,Cloud & Hyperscalers (demand side),162.75,0.14,15.16,11.87,0.83
+2026-09-09,BABA,Cloud & Hyperscalers (demand side),109.75,-2.59,-2.75,-14.16,0.5
+2026-09-09,AAPL,Devices & Consumer OEM,315.14,-0.34,-3.07,3.36,1.36
+2026-09-09,2317.TW,Devices & Consumer OEM,252.0,0.2,0.4,-6.67,0.51
+2026-09-09,6758.T,Devices & Consumer OEM,3625.0,-0.79,-7.53,-3.64,1.13
+2026-09-09,1810.HK,Devices & Consumer OEM,26.38,-2.01,-5.99,0.08,0.85
+2026-09-09,CRM,Software & AI Platforms,244.3,-1.93,-5.35,23.71,0.4
+2026-09-09,NOW,Software & AI Platforms,131.85,-1.76,-7.74,3.38,0.45
+2026-09-09,PLTR,Software & AI Platforms,170.29,-0.01,-5.36,-2.66,0.47
+2026-09-09,SAP,Software & AI Platforms,209.62,-0.88,-1.14,-0.03,0.83
+2026-09-09,SNOW,Software & AI Platforms,332.75,-0.82,4.05,-0.42,0.61
+2026-09-09,ARW,Distribution & Materials,215.36,-0.94,4.55,4.31,0.43
+2026-09-09,AVT,Distribution & Materials,92.1,-0.35,3.03,-4.02,0.4
+2026-09-09,4063.T,Distribution & Materials,5719.0,0.3,-2.57,-10.78,1.39
+2026-09-09,LIN,Distribution & Materials,466.07,-0.49,-3.94,-4.67,0.63
